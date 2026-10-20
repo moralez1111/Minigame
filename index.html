@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Minigame 💖</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Space+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0e0d12;
+      --panel-bg: rgba(26, 24, 35, 0.75);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --primary-pink: #ec4899;
+      --glow-pink: #f43f5e;
+      --accent-gold: #fbbf24;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --seat-reserved: #33313d;
+      --seat-heart: #db2777;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Background Ambient Glows */
+    .ambient-glow {
+      position: fixed;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      filter: blur(120px);
+      z-index: -1;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .bg-glow-1 { top: -100px; left: -100px; background: #be185d; }
+    .bg-glow-2 { bottom: -100px; right: -100px; background: #6b21a8; }
+
+    /* Path Finder Game Styles */
+    .intro-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-color);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.8s ease, visibility 0.8s ease;
+    }
+    .intro-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #app-game {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background-color: #0e0d12;
+      background-image: linear-gradient(to top, rgba(236, 72, 153, 0.15) 1%, rgba(255,255,255,0) 0),
+                        linear-gradient(to right, rgba(236, 72, 153, 0.15) 1%, rgba(255,255,255,0) 0);
+      background-size: 50px 50px;
+    }
+
+    #svg {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .dot {
+      z-index: 10;
+      stroke-width: 3;
+      stroke: #121019;
+      fill: #fbbf24;
+      transform-origin: center;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.320, 1.275);
+    }
+
+    .dot--starting {
+      fill: #121019;
+      stroke: #ec4899;
+      stroke-width: 3;
+    }
+
+    .dot:not(.dot--starting) {
+      opacity: 0;
+      animation: dotReveal 1s linear forwards;
+    }
+
+    #svg .dot:hover {
+      transform: scale(2);
+    }
+
+    #svg .dot[data-selected=true],
+    #svg .dot[data-visited=true] {
+      fill: #ec4899;
+      animation: jumping 0.5s ease-in-out alternate infinite;
+      opacity: 1;
+    }
+
+    .line {
+      z-index: 10;
+      stroke: #ec4899;
+      stroke-width: 2;
+      stroke-dasharray: 2 16;
+      animation: line 10s linear infinite;
+    }
+
+    #score {
+      position: absolute;
+      z-index: 0;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 15em;
+      color: rgba(236, 72, 153, 0.12);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    /* Game Over Modal */
+    .game-over-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(26, 24, 35, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--primary-pink);
+      padding: 2.2rem 2.8rem;
+      border-radius: 20px;
+      text-align: center;
+      z-index: 50;
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    }
+    .game-over-modal.hidden {
+      display: none;
+    }
+    .game-over-modal h2 {
+      color: var(--glow-pink);
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .game-over-modal p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @keyframes jumping {
+      0% { transform: scale(1.6); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes dotReveal {
+      to { opacity: 1; }
+    }
+
+    @keyframes line {
+      0% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: 100%; }
+    }
+
+    /* Page Visibility */
+    .page-hidden {
+      display: none !important;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2.5rem;
+      margin-top: 0.5rem;
+      background: linear-gradient(135deg, #fff 30%, var(--primary-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.4rem 1rem;
+      background: rgba(236, 72, 153, 0.15);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      color: #f472b6;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    /* Section Cards */
+    .card-section {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 1.8rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1.4rem;
+    }
+
+    /* Movie Hero Section */
+    .movie-hero-section {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+    .hero-poster-wrapper {
+      flex-shrink: 0;
+      width: 200px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+      border: 2px solid rgba(236, 72, 153, 0.5);
+    }
+    .hero-poster {
+      width: 100%;
+      height: 290px;
+      object-fit: cover;
+      display: block;
+    }
+    .hero-content {
+      flex: 1;
+    }
+    .movie-badges {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.8rem;
+    }
+    .m-badge {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .m-badge.highlight {
+      background: rgba(236, 72, 153, 0.2);
+      border-color: var(--primary-pink);
+      color: #f472b6;
+    }
+    .hero-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-bottom: 0.4rem;
+    }
+    .hero-genre {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.4rem;
+    }
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+    .detail-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      padding: 0.8rem 1rem;
+      border-radius: 12px;
+    }
+    .d-label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.2rem;
+    }
+    .d-val {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    @media (max-width: 650px) {
+      .movie-hero-section {
+        flex-direction: column;
+        text-align: center;
+      }
+      .hero-poster-wrapper {
+        width: 170px;
+      }
+      .movie-badges {
+        justify-content: center;
+      }
+      .details-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Seat Map Container */
+    .cinema-container {
+      background: #14131a;
+      border-radius: 16px;
+      padding: 1.5rem 1rem;
+      overflow-x: auto;
+    }
+    .seat-map-wrapper {
+      min-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .seat-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .seat-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      justify-content: center;
+    }
+    .row-num {
+      width: 20px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: right;
+      margin-right: 0.5rem;
+    }
+    .seat {
+      width: 26px;
+      height: 24px;
+      border-radius: 4px;
+      background: var(--seat-reserved);
+      color: #666;
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    .seat.heart {
+      background: var(--seat-heart);
+      color: #fff;
+      font-size: 0.85rem;
+      box-shadow: 0 0 12px var(--seat-heart);
+      transform: scale(1.2);
+    }
+
+    /* Screen Bar */
+    .screen-wrapper {
+      width: 80%;
+      text-align: center;
+      margin-top: 1rem;
+    }
+    .screen-bar {
+      height: 5px;
+      background: linear-gradient(90deg, transparent, var(--primary-pink), transparent);
+      box-shadow: 0 0 15px var(--primary-pink);
+      border-radius: 50%;
+      margin-bottom: 0.5rem;
+    }
+    .screen-text {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 2px;
+    }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+    }
+    .swatch.reserved { background: var(--seat-reserved); }
+    .swatch.heart { background: var(--seat-heart); }
+
+    /* Snacks Grid */
+    .snack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .snack-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      position: relative;
+    }
+    .snack-card.active {
+      border-color: var(--primary-pink);
+      background: rgba(236, 72, 153, 0.08);
+    }
+    .snack-icon { font-size: 2rem; }
+    .snack-info h4 { font-size: 0.95rem; }
+    .snack-info p { font-size: 0.8rem; color: var(--text-muted); }
+    .check-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: var(--primary-pink);
+      font-weight: bold;
+    }
+
+    /* McDonald's Card Section */
+    .mcdonalds-section {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(239, 68, 68, 0.15));
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+    .mc-card {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+    .mc-icon {
+      font-size: 2.8rem;
+      background: rgba(251, 191, 36, 0.15);
+      border-radius: 16px;
+      padding: 0.6rem 0.8rem;
+    }
+    .mc-info h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.3rem;
+      color: var(--accent-gold);
+    }
+    .mc-info p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    /* Footer Action */
+    .action-footer {
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+    .btn-yes {
+      background: linear-gradient(135deg, var(--primary-pink), var(--glow-pink));
+      color: #fff;
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.5);
+      padding: 1rem 2.5rem;
+      border-radius: 50px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-yes:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 35px rgba(244, 63, 94, 0.8);
+    }
+
+    /* Modal Ticket */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 999;
+      padding: 1rem;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: #1c1a26;
+      border: 1px solid var(--primary-pink);
+      border-radius: 20px;
+      max-width: 450px;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(236, 72, 153, 0.3);
+    }
+    .close-modal {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .ticket-wrapper {
+      padding: 2rem;
+    }
+    .pass-tag {
+      font-size: 0.75rem;
+      color: var(--accent-gold);
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .ticket-header h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.6rem;
+      margin: 0.3rem 0;
+    }
+    .ticket-header p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .ticket-body {
+      margin: 1.5rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      border-top: 1px dashed var(--border-color);
+      border-bottom: 1px dashed var(--border-color);
+      padding: 1.2rem 0;
+    }
+    .ticket-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+    }
+    .ticket-row .label { color: var(--text-muted); }
+    .ticket-row .val { font-weight: 600; text-align: right; }
+    .ticket-note {
+      background: rgba(236, 72, 153, 0.1);
+      padding: 0.8rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: #f472b6;
+    }
+    .barcode {
+      letter-spacing: 4px;
+      font-family: monospace;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 50px;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      background: var(--primary-pink);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Glow Background -->
+  <div class="ambient-glow bg-glow-1"></div>
+  <div class="ambient-glow bg-glow-2"></div>
+
+  <!-- PATH FINDER MINIGAME OVERLAY (Launches Automatically) -->
+  <div class="intro-overlay" id="introOverlay">
+    <div id="app-game">
+      <div id="score">0</div>
+      <svg id="svg"></svg>
+
+      <!-- Game Over Modal with PLAY AGAIN button -->
+      <div id="game-over-screen" class="game-over-modal hidden">
+        <h2>Game Over 😅</h2>
+        <p>You missed the nearest dot!</p>
+        <button class="btn-yes" onclick="restartGame()">PLAY AGAIN 🔄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN INVITATION CONTAINER (Revealed after score reaches 9) -->
+  <main class="container page-hidden" id="mainContainer">
+
+    <!-- Header Section -->
+    <header class="header">
+      <div class="badge">MOVIE NIGHT INVITATION 🎟️</div>
+      <h1>Movie Date With Me 🎬✨</h1>
+    </header>
+
+    <!-- Hero Showcase: Movie Details + Date & Location -->
+<section class="card-section movie-hero-section">
+  <div class="hero-poster-wrapper">
+    <img src="twilight.jpg" 
+         class="hero-poster" 
+         alt="The Twilight Saga: New Moon">
+  </div>
+      
+      <div class="hero-content">
+        <div class="movie-badges">
+          <span class="m-badge">2D</span>
+          <span class="m-badge">ENG</span>
+          <span class="m-badge highlight">12+</span>
+        </div>
+        
+        <h2 class="hero-title">The Twilight Saga: New Moon</h2>
+        <p class="hero-genre">Romance • Drama • Fantasy • 2h 10m</p>
+
+        <div class="details-grid">
+          <div class="detail-box">
+            <span class="d-label">📍 Cinema Location</span>
+            <span class="d-val">Cavea, East Point</span>
+          </div>
+          <div class="detail-box">
+            <span class="d-label">📅 Date</span>
+            <span class="d-val">Tomorrow, 21 October</span>
+          </div>
+          <div class="detail-box">
+            <span class="d-label">⏰ Showtime</span>
+            <span class="d-val">19:15</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Seating Map Section -->
+    <section class="card-section">
+      <h2 class="section-title">Our Seats</h2>
+      
+      <div class="cinema-container">
+        <div class="seat-map-wrapper">
+          
+          <div class="seat-grid" id="seatGrid">
+            <!-- Seat grid rendered via JS -->
+          </div>
+
+          <!-- Screen Bar -->
+          <div class="screen-wrapper">
+            <div class="screen-bar"></div>
+            <div class="screen-text">SCREEN / ეკრანი</div>
+          </div>
+
+          <!-- Legend -->
+          <div class="legend">
+            <div class="legend-item"><span class="swatch heart">🤍</span> Our Seats</div>
+            <div class="legend-item"><span class="swatch reserved"></span> Other</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Snacks Selection Display -->
+    <section class="card-section">
+      <h2 class="section-title">Movie Date Snacks</h2>
+      <div class="snack-grid">
+        <div class="snack-card active">
+          <div class="snack-icon">🍿</div>
+          <div class="snack-info">
+            <h4>Popcorn</h4>
+            <p>Large popcorn to share</p>
+          </div>
+          <div class="check-badge">✓</div>
+        </div>
+
+        <div class="snack-card active">
+          <div class="snack-icon">🥤</div>
+          <div class="snack-info">
+            <h4>Coca-Cola</h4>
+            <p>Zero & Classic</p>
+          </div>
+          <div class="check-badge">✓</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- After The Movie McDonald's Section -->
+    <section class="card-section mcdonalds-section">
+      <h2 class="section-title">After The Movie</h2>
+      <div class="mc-card">
+        <div class="mc-icon">🍔</div>
+        <div class="mc-info">
+          <h3>McDonald's Date Stop</h3>
+          <p>After the movie, we go straight to McDonald's!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Action Confirmation Button -->
+    <div class="action-footer">
+      <button class="btn-yes" onclick="handleOpenTicket()">GET OUR MOVIE DATE PASS 🎟️✨</button>
+    </div>
+
+  </main>
+
+  <!-- Ticket Modal Pass -->
+  <div class="modal-overlay" id="ticketModal">
+    <div class="modal-card">
+      <button class="close-modal" onclick="closeModal()">✕</button>
+      <div class="ticket-wrapper">
+        <div class="ticket-header">
+          <div class="pass-tag">CAVEA EAST POINT PASS</div>
+          <h2>OUR MOVIE DATE TICKET 🎟️</h2>
+          <p>Get ready for a cozy date!</p>
+        </div>
+        <div class="ticket-body">
+          <div class="ticket-row">
+            <span class="label">Movie:</span>
+            <span class="val">The Twilight Saga: New Moon</span>
+          </div>
+          <div class="ticket-row">
+            <span class="label">Date & Time:</span>
+            <span class="val">21 October • 19:15</span>
+          </div>
+          <div class="ticket-row">
+            <span class="label">Location:</span>
+            <span class="val">Cavea, East Point</span>
+          </div>
+          <div class="ticket-row">
+            <span class="label">Seats:</span>
+            <span class="val">Row 7 - Seats 6, 7 💖</span>
+          </div>
+          <div class="ticket-row">
+            <span class="label">Snacks:</span>
+            <span class="val">Popcorn & Coca-Cola</span>
+          </div>
+          <div class="ticket-row">
+            <span class="label">After Movie:</span>
+            <span class="val">McDonald's Stop 🍟🍔</span>
+          </div>
+          <div class="ticket-note">
+            <p><strong>Note for you:</strong> "I can't wait to see you honey❤️"</p>
+          </div>
+        </div>
+        <div class="ticket-stub">
+          <div class="barcode">||||| | |||||| ||| ||||||| |||||</div>
+          <button class="btn-primary" onclick="copyPassDetails()">Copy Pass Details 📋</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global Helper Functions
+    function getDistance(obj1, obj2) {
+      return Math.floor(
+        Math.sqrt(Math.pow(obj1.cx - obj2.cx, 2) + Math.pow(obj1.cy - obj2.cy, 2))
+      );
+    }
+
+    function getRandomArbitrary(min, max) {
+      return Math.floor(Math.random() * (max - min) + min);
+    }
+
+    function comparator(a, b) {
+      if (a[1] < b[1]) return -1;
+      if (a[1] > b[1]) return 1;
+      return 0;
+    }
+
+    // Global Variables
+    var svg = document.getElementById("svg");
+    var screenW = window.innerWidth;
+    var screenH = window.innerHeight;
+
+    function Line(x1, y1, x2, y2) {
+      this.x1 = x1;
+      this.y1 = y1;
+      this.x2 = x2;
+      this.y2 = y2;
+      this.el = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      this.class = "line";
+      this.update = function(x1, y1, x2, y2) {
+        this.el.setAttribute("x1", x1 || this.x1);
+        this.el.setAttribute("y1", y1 || this.y1);
+        this.el.setAttribute("x2", x2 || this.x2);
+        this.el.setAttribute("y2", y2 || this.y2);
+        this.setAttr("class", this.class);
+      };
+      this.setAttr = function(attr, value) {
+        this.el.setAttribute(attr, value);
+      };
+      this.append = function() {
+        svg.insertBefore(this.el, svg.firstChild);
+      };
+    }
+
+    function Dot(r, cx, cy) {
+      this.r = r;
+      this.cx = cx;
+      this.cy = cy;
+      this.el = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      this.class = "dot";
+      this.update = function() {
+        this.el.setAttribute("r", this.r);
+        this.el.setAttribute("cx", this.cx);
+        this.el.setAttribute("cy", this.cy);
+        this.setAttr("class", this.class);
+      };
+
+      this.activate = function() {
+        for (let i = 0; i < dots.num; i++) {
+          dots.list[i].setAttr("data-selected", "false");
+        }
+        this.setAttr("data-selected", "true");
+      };
+
+      this.visited = function() {
+        this.setAttr("data-visited", "true");
+      };
+
+      this.setAttr = function(attr, value) {
+        this.el.setAttribute(attr, value);
+      };
+
+      this.append = function() {
+        svg.appendChild(this.el);
+        this.el.addEventListener("click", this.onClick);
+      };
+
+      this.onClick = function(event) {
+        var thisId = Number(event.target.getAttribute("data-id").substr(3, 2));
+        var thisCx = dots.list[thisId].cx;
+        var thisCy = dots.list[thisId].cy;
+
+        var distances = [];
+        for (let i = 0; i < dots.num; i++) {
+          distances[i] = [i, getDistance(dots.selected, dots.list[i])];
+        }
+        distances.sort(comparator);
+        distances.splice(0, 1);
+        var distancesLeft = [];
+        for (let i = 0; i < distances.length; i++) {
+          if (dots.left.includes(distances[i][0])) {
+            distancesLeft.push(distances[i][0]);
+          }
+        }
+
+        if (thisId == distancesLeft[0] && dots.left.includes(thisId)) {
+          app.score.update(1);
+
+          dots.list[thisId].activate();
+          dots.list[thisId].visited();
+
+          lines.list.push(
+            new Line(
+              dots.selected.cx,
+              dots.selected.cy,
+              dots.list[thisId].cx,
+              dots.list[thisId].cy
+            )
+          );
+          lines.list[lines.list.length - 1].update();
+          lines.list[lines.list.length - 1].append();
+
+          dots.selected.id = thisId;
+          dots.selected.cx = thisCx;
+          dots.selected.cy = thisCy;
+
+          for (let i = 0; i < dots.left.length; i++) {
+            if (dots.left[i] === thisId) {
+              dots.left.splice(i, 1);
+            }
+          }
+
+          // Check if target score of 9 reached
+          if (app.score.number >= 9) {
+            finishGameAndReveal();
+          } else if (dots.left.length == 0) {
+            app.end(true);
+          }
+        } else {
+          app.end(false);
+        }
+      };
+    }
+
+    var lines = { list: [] };
+    var dots = {
+      num: 4,
+      list: [],
+      start: 0,
+      selected: { id: 0 },
+      left: []
+    };
+
+    var app = {
+      level: 4,
+      score: {
+        number: 0,
+        el: document.getElementById("score"),
+        update: function(s) {
+          app.score.number += s;
+          app.score.el.textContent = app.score.number;
+        },
+        reset: function() {
+          app.score.number = 0;
+          app.score.update(0);
+        }
+      }
+    };
+
+    app.preline = new Line(0, 0, 200, 200);
+
+    app.start = function(dotsNum) {
+      dots.num = dotsNum;
+      dots.list = [];
+      dots.left = [];
+      lines.list = [];
+      svg.innerHTML = "";
+
+      screenW = window.innerWidth;
+      screenH = window.innerHeight;
+
+      for (let i = 0; i < dots.num; i++) {
+        var cx = getRandomArbitrary(20, screenW - 20);
+        var cy = getRandomArbitrary(20, screenH - 20);
+
+        dots.list[i] = new Dot(8, cx, cy);
+        dots.list[i].setAttr("data-id", "id-" + i);
+        dots.list[i].setAttr(
+          "style",
+          "animation-delay:" + i / 10 + "s; transform-origin: " + cx + 'px ' + cy + 'px;'
+        );
+        dots.list[i].update();
+        dots.list[i].append();
+        dots.left.push(i);
+
+        if (i == dots.start) {
+          dots.selected.cx = dots.list[dots.start].cx;
+          dots.selected.cy = dots.list[dots.start].cy;
+          dots.list[dots.start].setAttr("class", "dot dot--starting");
+          dots.left.splice(i, 1);
+        }
+      }
+
+      app.preline.update(
+        dots.selected.cx,
+        dots.selected.cy,
+        dots.selected.cx,
+        dots.selected.cy
+      );
+      app.preline.append();
+
+      svg.addEventListener("mousemove", function(e) {
+        app.preline.update(dots.selected.cx, dots.selected.cy, e.pageX, e.pageY);
+      });
+
+      dots.list[dots.start].setAttr("data-selected", "true");
+    };
+
+    app.end = function(win) {
+      if (win) {
+        app.level += 3;
+        app.start(app.level);
+      } else {
+        // Show PLAY AGAIN modal on game over
+        document.getElementById("game-over-screen").classList.remove("hidden");
+      }
+    };
+
+    function restartGame() {
+      document.getElementById("game-over-screen").classList.add("hidden");
+      app.level = 4;
+      app.score.reset();
+      app.start(app.level);
+    }
+
+    function finishGameAndReveal() {
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      setTimeout(revealMainPage, 600);
+    }
+
+    function revealMainPage() {
+      document.getElementById("introOverlay").classList.add("hidden");
+      document.getElementById("mainContainer").classList.remove("page-hidden");
+    }
+
+    // Automatically start game upon opening page
+    document.addEventListener("DOMContentLoaded", () => {
+      renderSeatGrid();
+      app.start(app.level);
+    });
+
+    function renderSeatGrid() {
+      const grid = document.getElementById("seatGrid");
+      const layout = [
+        { row: 11, totalSeats: 18 },
+        { row: 10, totalSeats: 14 },
+        { row: 9,  totalSeats: 14 },
+        { row: 8,  totalSeats: 14 },
+        { row: 7,  totalSeats: 13 },
+        { row: 6,  totalSeats: 13 },
+        { row: 5,  totalSeats: 13 },
+        { row: 4,  totalSeats: 13 },
+        { row: 3,  totalSeats: 14 },
+        { row: 2,  totalSeats: 14 },
+        { row: 1,  totalSeats: 10 }
+      ];
+
+      grid.innerHTML = layout.map(r => {
+        let seatsHtml = "";
+        for (let s = 1; s <= r.totalSeats; s++) {
+          if (r.row === 7 && (s === 6 || s === 7)) {
+            seatsHtml += `<div class="seat heart" title="Our Reserved Seat (Row 7 - ${s})">🤍</div>`;
+          } else {
+            seatsHtml += `<div class="seat" title="Reserved">${s}</div>`;
+          }
+        }
+        return `
+          <div class="seat-row">
+            <div class="row-num">${r.row}</div>
+            ${seatsHtml}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function handleOpenTicket() {
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      document.getElementById("ticketModal").classList.add("active");
+    }
+
+    function closeModal() {
+      document.getElementById("ticketModal").classList.remove("active");
+    }
+
+    function copyPassDetails() {
+      const text = `🎟️ MOVIE DATE PASS 💖\nMovie: The Twilight Saga: New Moon\nDate: Tomorrow, 21 October at 19:15\nLocation: Cavea East Point\nSeats: Row 7 - Seats 6, 7 💖\nSnacks: Popcorn & Coca-Cola\nAfter Movie: McDonald's Stop 🍟`;
+      navigator.clipboard.writeText(text);
+      alert("Pass details copied to clipboard! 📋✨");
+    }
+  </script>
+</body>
+</html>
